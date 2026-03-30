@@ -30,6 +30,10 @@ pub struct Args {
     /// Referer 请求头
     #[arg(short, long)]
     pub referer: Option<String>,
+
+    /// 跳过 SSL 证书验证（不安全，仅用于测试）
+    #[arg(short = 'k', long)]
+    pub insecure: bool,
 }
 
 impl Args {

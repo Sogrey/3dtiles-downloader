@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::fs;
-use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 /// 下载工作器
 pub struct Downloader {
@@ -23,7 +23,7 @@ pub struct Downloader {
 impl Downloader {
     /// 创建新的下载器
     pub fn new(
-        http_client: HttpClient,
+        http_client: Arc<HttpClient>,
         queue: DownloadQueue,
         output_dir: String,
         threads: usize,
@@ -38,7 +38,7 @@ impl Downloader {
         );
 
         Self {
-            http_client: Arc::new(http_client),
+            http_client,
             queue,
             output_dir,
             threads,
@@ -48,55 +48,63 @@ impl Downloader {
 
     /// 启动下载
     pub async fn run(&self) -> Result<()> {
-        let semaphore = Arc::new(Semaphore::new(self.threads));
-        let mut handles = vec![];
+        let mut join_set = JoinSet::new();
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(self.threads));
 
-        loop {
+        // 获取所有任务
+        let mut tasks = Vec::new();
+        while let Some(task) = self.queue.pop().await {
+            tasks.push(task);
+        }
+
+        self.progress.println(format!("开始下载 {} 个文件...", tasks.len()));
+
+        // 启动下载任务
+        for task in tasks {
             let permit = semaphore.clone().acquire_owned().await?;
+            let http_client = self.http_client.clone();
+            let output_dir = self.output_dir.clone();
+            let progress = self.progress.clone();
 
-            if let Some(task) = self.queue.pop().await {
-                let http_client = self.http_client.clone();
-                let output_dir = self.output_dir.clone();
-                let progress = self.progress.clone();
-
-                let handle = tokio::spawn(async move {
-                    let _permit = permit;
-                    if let Err(e) = download_file(&http_client, &task, &output_dir).await {
-                        progress.println(format!("下载失败: {} - {}", task.url, e));
-                    } else {
+            join_set.spawn(async move {
+                let _permit = permit;
+                
+                match download_file(&http_client, &task, &output_dir).await {
+                    Ok(size) => {
                         progress.inc(1);
+                        progress.println(format!("✅ {} ({:.2} KB)", task.relative_path, size as f64 / 1024.0));
                     }
-                });
-
-                handles.push(handle);
-            } else {
-                break;
-            }
+                    Err(e) => {
+                        progress.println(format!("❌ {} - {}", task.relative_path, e));
+                    }
+                }
+            });
         }
 
         // 等待所有任务完成
-        for handle in handles {
-            handle.await?;
-        }
+        while join_set.join_next().await.is_some() {}
 
         self.progress.finish_with_message("下载完成");
         Ok(())
     }
 }
 
-/// 下载单个文件
-async fn download_file(http_client: &HttpClient, task: &DownloadTask, output_dir: &str) -> Result<()> {
+/// 下载单个文件，返回文件大小
+async fn download_file(http_client: &HttpClient, task: &DownloadTask, output_dir: &str) -> Result<usize> {
     // 构建输出路径
     let output_path = Path::new(output_dir).join(&task.relative_path);
 
     // 创建父目录
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent).await?;
+        if !parent.exists() {
+            fs::create_dir_all(parent).await?;
+        }
     }
 
     // 检查文件是否已存在
     if output_path.exists() {
-        return Ok(());
+        let metadata = std::fs::metadata(&output_path)?;
+        return Ok(metadata.len() as usize);
     }
 
     // 下载数据
@@ -105,5 +113,5 @@ async fn download_file(http_client: &HttpClient, task: &DownloadTask, output_dir
     // 保存文件
     fs::write(&output_path, &data).await?;
 
-    Ok(())
+    Ok(data.len())
 }

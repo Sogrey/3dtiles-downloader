@@ -55,6 +55,7 @@ tiles_downloader \
 | `--end` | `-e` | 否 | 结束下载位置下标 | 总长度 |
 | `--threads` | `-t` | 否 | 线程数 | 1 |
 | `--referer` | `-r` | 否 | Referer 请求头 | - |
+| `--insecure` | `-k` | 否 | 跳过 SSL 证书验证 | false |
 
 ### 示例
 
@@ -67,16 +68,44 @@ tiles_downloader -u https://example.com/tileset.json -d ./data -t 4
 
 # 分段下载（下载前1000个文件）
 tiles_downloader -u https://example.com/tileset.json -d ./data -s 0 -e 1000 -t 4
+
+# 跳过 SSL 验证（用于测试环境或证书过期的服务器）
+tiles_downloader -u https://example.com/tileset.json -d ./data -k
+
+tiles_downloader --url https://stone.fren.ink/demo/data/tileset.json --dir download --threads 3 --insecure
 ```
 
 ## 与 Python 版本对比
 
 | 特性 | Python 版本 | Rust 版本 |
 |------|-------------|-----------|
-| 性能 | 较慢 | 快 |
-| 内存 | 较高 | 低 |
-| 并发 | 多线程 | 异步 + 多线程 |
-| 部署 | 需要 Python 环境 | 单文件可执行 |
+| 性能 | 较慢 | 快 ⚡ |
+| 内存 | 较高 | 低 💪 |
+| 并发 | 多线程 | 异步 + 多线程 🚀 |
+| 部署 | 需要 Python 环境 | 单文件可执行 📦 |
+| 递归子 tileset | ✓ | ✓ ✅ |
+| SSL 跳过 | ✗ | ✓ ✅ |
+| 重试机制 | ✓ | ✓ (最多 3 次) ✅ |
+| 进度显示 | ✓ | ✓ (带文件大小) ✅ |
+
+## 输出说明
+
+下载完成后，输出目录结构如下：
+
+```
+output/
+├── tileset.json          # 主 tileset 文件
+├── sub/                   # 子目录（如果有）
+│   ├── tileset.json      # 子 tileset 文件
+│   └── tiles/            # 瓦片数据
+│       ├── 0-0.b3dm
+│       └── 0-1.b3dm
+└── tiles/                # 瓦片数据
+    ├── 0-0.b3dm
+    └── 0-1.glb
+```
+
+所有 tileset.json 和瓦片文件都会保持原有的目录结构。
 
 ## 开发
 

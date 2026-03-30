@@ -21,13 +21,13 @@
 
 ### 核心功能
 - [x] 解析 tileset.json 文件
-- [ ] 递归获取所有子 tileset 和资源文件
-- [ ] 多线程并发下载
-- [ ] 支持分段下载（指定起始和结束位置）
-- [ ] 支持断点续传
-- [ ] 自动处理压缩格式（gzip、deflate、brotli）
-- [ ] 进度显示
-- [ ] 错误重试机制
+- [x] 递归获取所有子 tileset 和资源文件
+- [x] 多线程并发下载
+- [x] 支持分段下载（指定起始和结束位置）
+- [x] 支持断点续传
+- [x] 自动处理压缩格式（gzip、deflate、brotli）
+- [x] 进度显示
+- [x] 错误重试机制
 
 ### 命令行参数
 | 参数 | 缩写 | 必填 | 说明 | 默认值 |
@@ -180,23 +180,33 @@ tiles-downloader/
 
 ### 1. 3D Tiles 数据结构
 - tileset.json 是树形结构，需要递归解析
-- 资源文件类型：.b3dm、.b3dm、.i3dm、.pnts、.cmpt
-- 可能包含外部 tileset.json（需要递归处理）
+- 资源文件类型：.b3dm、.glb、.i3dm、.pnts、.cmpt
+- 可能包含外部 tileset.json（已实现递归处理）
+- 使用 `HashSet` 避免重复处理同一个 tileset
 
 ### 2. 多线程下载
 - 使用 `tokio` 异步运行时
-- 使用 `Arc<Mutex<>>` 共享下载队列
-- 使用 `mpsc` 通道进行任务分发
+- 使用 `Arc<Mutex<Vec<String>>>` 共享资源列表
+- 使用 `JoinSet` 管理异步任务
+- 使用 `Semaphore` 控制并发数
 
 ### 3. 断点续传
-- 记录已下载文件列表
 - 下载前检查文件是否存在
-- 支持 HTTP Range 请求（可选）
+- 已存在则跳过下载
+- 保存所有 tileset.json 文件
 
 ### 4. 压缩处理
-- 检测 Content-Encoding 响应头
-- 自动解压 gzip、deflate、brotli
-- 保存原始文件（不解压）或解压后保存
+- reqwest 自动处理 gzip、deflate、brotli
+- 无需手动解压
+
+### 5. 错误处理和重试
+- 每个文件最多重试 3 次
+- 重试间隔 2 秒
+- 使用 `anyhow` 提供详细错误上下文
+
+### 6. SSL 证书验证
+- 支持 `--insecure` 跳过 SSL 验证
+- 用于测试环境或证书过期的服务器
 
 ---
 

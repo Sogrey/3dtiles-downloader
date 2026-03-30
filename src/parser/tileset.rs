@@ -128,7 +128,7 @@ impl Tileset {
     }
 
     /// 解析相对 URL
-    fn resolve_url(base_url: &str, uri: &str) -> String {
+    pub fn resolve_url(base_url: &str, uri: &str) -> String {
         if uri.starts_with("http://") || uri.starts_with("https://") {
             return uri.to_string();
         }
@@ -149,6 +149,12 @@ impl Tileset {
         } else {
             format!("{}/{}", base, uri)
         }
+    }
+
+    /// 判断 URI 是否为 tileset.json 文件
+    pub fn is_tileset_json(uri: &str) -> bool {
+        uri.to_lowercase().ends_with("tileset.json") || 
+        uri.to_lowercase().ends_with(".json") && uri.contains("tileset")
     }
 }
 
